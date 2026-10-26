@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enterprise Knowledge Assistant (RAG)</title>
+  <!-- Google Fonts & Tailwind CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .glass-card { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
+    <div class="flex items-center space-x-3.5">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <i class="fa-solid fa-brain text-white text-lg"></i>
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <h1 class="text-base font-bold text-white tracking-tight">Enterprise Knowledge Assistant</h1>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30">RAG v1.0</span>
+        </div>
+        <p class="text-xs text-slate-400">Context-Grounded Answers with Source Attribution & Hallucination Guardrails</p>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="flex items-center space-x-1.5 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60">
+      <button onclick="switchTab('chat')" id="tab-chat" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center space-x-2 bg-blue-600 text-white shadow">
+        <i class="fa-solid fa-comments"></i>
+        <span>Assistant</span>
+      </button>
+      <button onclick="switchTab('documents')" id="tab-documents" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center space-x-2 text-slate-400 hover:text-slate-200">
+        <i class="fa-solid fa-folder-tree"></i>
+        <span>Documents</span>
+        <span id="nav-doc-badge" class="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-700 text-slate-300">0</span>
+      </button>
+      <button onclick="switchTab('evaluation')" id="tab-evaluation" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center space-x-2 text-slate-400 hover:text-slate-200">
+        <i class="fa-solid fa-chart-line"></i>
+        <span>Evaluation & Metrics</span>
+      </button>
+    </div>
+
+    <!-- System Status Badge -->
+    <div class="flex items-center space-x-3 text-xs">
+      <div class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="font-medium" id="system-status-text">FAISS Vector Index Active</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 flex overflow-hidden">
+    
+    <!-- TAB 1: Chat Assistant -->
+    <div id="view-chat" class="flex-1 flex flex-col h-[calc(100vh-65px)]">
+      <!-- Chat Messages Scrollable Area -->
+      <div id="chat-messages" class="flex-1 overflow-y-auto custom-scroll p-6 space-y-6">
+        <!-- Welcome Hero -->
+        <div id="chat-welcome" class="max-w-2xl mx-auto my-8 text-center space-y-4">
+          <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-600 mx-auto flex items-center justify-center shadow-xl shadow-blue-500/20">
+            <i class="fa-solid fa-shield-halved text-2xl text-white"></i>
+          </div>
+          <h2 class="text-xl font-bold text-white">Ask Anything Across Company Documents</h2>
+          <p class="text-xs text-slate-400 leading-relaxed max-w-lg mx-auto">
+            Answers are retrieved directly from corporate policies, manuals, and financial reports with verified page citations. If information is missing, the assistant refuses to speculate.
+          </p>
+
+          <!-- Suggested Prompt Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-4 text-left max-w-xl mx-auto">
+            <button onclick="usePrompt('How many days of paid annual leave are employees entitled to?')" class="p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition text-left group">
+              <span class="text-[11px] font-semibold text-blue-400 block mb-1">HR Policy</span>
+              <p class="text-xs text-slate-200 group-hover:text-white">"How many days of paid annual leave are employees entitled to?"</p>
+            </button>
+            <button onclick="usePrompt('What is the password rotation policy for corporate systems?')" class="p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition text-left group">
+              <span class="text-[11px] font-semibold text-indigo-400 block mb-1">Security Standards</span>
+              <p class="text-xs text-slate-200 group-hover:text-white">"What is the password rotation policy for corporate systems?"</p>
+            </button>
+            <button onclick="usePrompt('What was the enterprise revenue and profit margin in Q3?')" class="p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition text-left group">
+              <span class="text-[11px] font-semibold text-emerald-400 block mb-1">Financial Report</span>
+              <p class="text-xs text-slate-200 group-hover:text-white">"What was the enterprise revenue and profit margin in Q3?"</p>
+            </button>
+            <button onclick="usePrompt('What is the company policy on flying to Mars for vacation?')" class="p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition text-left group">
+              <span class="text-[11px] font-semibold text-amber-400 block mb-1">Hallucination Test</span>
+              <p class="text-xs text-slate-200 group-hover:text-white">"What is the company policy on flying to Mars for vacation?"</p>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Input Toolbar & Form -->
+      <div class="border-t border-slate-800 bg-slate-900/95 p-4 backdrop-blur">
+        <div class="max-w-4xl mx-auto">
+          <form id="chat-form" onsubmit="handleChatSubmit(event)" class="relative">
+            <div class="relative flex items-center bg-slate-800/90 rounded-2xl border border-slate-700/80 shadow-2xl focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
+              <div class="pl-4 text-slate-400">
+                <i class="fa-solid fa-magnifying-glass text-sm"></i>
+              </div>
+              <input
+                id="query-input"
+                type="text"
+                placeholder="Ask about HR rules, cloud security protocols, financial metrics..."
+                class="w-full bg-transparent px-4 py-3.5 text-sm text-white placeholder-slate-400 focus:outline-none"
+                autocomplete="off"
+              />
+              <button
+                type="submit"
+                id="send-button"
+                class="mr-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md flex items-center space-x-1.5 transition disabled:opacity-50"
+              >
+                <span>Ask</span>
+                <i class="fa-solid fa-arrow-up text-xs"></i>
+              </button>
+            </div>
+          </form>
+          <div class="flex items-center justify-between text-[11px] text-slate-500 px-3 pt-2">
+            <span class="flex items-center space-x-1.5">
+              <i class="fa-solid fa-lock text-[10px] text-slate-400"></i>
+              <span>Enterprise Grounded QA • Zero hallucination tolerance</span>
+            </span>
+            <span id="active-doc-count" class="text-slate-400">Checking indexed documents...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Document Management -->
+    <div id="view-documents" class="hidden flex-1 overflow-y-auto custom-scroll p-8 max-w-5xl mx-auto w-full space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-bold text-white">Company Document Ingestion</h2>
+          <p class="text-xs text-slate-400">Upload PDF policy handbooks, text manuals, and reports for vector indexing.</p>
+        </div>
+        <button onclick="loadSampleDocuments()" class="px-3.5 py-2 rounded-xl bg-blue-600/20 border border-blue-500/40 text-blue-400 hover:bg-blue-600/30 text-xs font-semibold flex items-center space-x-2 transition">
+          <i class="fa-solid fa-cloud-arrow-down"></i>
+          <span>Ingest Sample Enterprise Docs</span>
+        </button>
+      </div>
+
+      <!-- Drag & Drop Upload Zone -->
+      <div
+        id="drop-zone"
+        class="border-2 border-dashed border-slate-700 hover:border-blue-500/60 rounded-2xl p-8 text-center bg-slate-800/40 transition cursor-pointer group"
+        onclick="document.getElementById('file-input').click()"
+      >
+        <input type="file" id="file-input" multiple accept=".pdf,.txt,.md" class="hidden" onchange="handleFileSelect(event)">
+        <div class="w-14 h-14 rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center mx-auto mb-3 group-hover:scale-105 transition">
+          <i class="fa-solid fa-file-arrow-up text-2xl"></i>
+        </div>
+        <p class="text-sm font-semibold text-slate-200">Click to upload or drag & drop documents</p>
+        <p class="text-xs text-slate-400 mt-1">Supports PDF (.pdf) and Plain Text (.txt, .md)</p>
+      </div>
+
+      <!-- Ingested Documents List -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider text-[11px]">Indexed Documents</h3>
+          <span id="doc-summary-badge" class="text-xs text-slate-400">0 documents indexed</span>
+        </div>
+        <div id="document-table-body" class="space-y-2">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Evaluation & Benchmarks -->
+    <div id="view-evaluation" class="hidden flex-1 overflow-y-auto custom-scroll p-8 max-w-5xl mx-auto w-full space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-bold text-white">RAG Evaluation Suite & System Metrics</h2>
+          <p class="text-xs text-slate-400">Benchmarking Answer Correctness, Retrieval Precision/Recall, Hallucination Prevention, and Latency.</p>
+        </div>
+        <button id="run-eval-btn" onclick="runBenchmarkEvaluation()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-lg shadow-teal-500/20 flex items-center space-x-2 transition">
+          <i class="fa-solid fa-play text-xs"></i>
+          <span>Run Evaluation Benchmark</span>
+        </button>
+      </div>
+
+      <!-- KPI Metrics Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80">
+          <div class="flex items-center justify-between text-slate-400 text-xs mb-1">
+            <span>Answer Correctness</span>
+            <i class="fa-solid fa-check-double text-blue-400"></i>
+          </div>
+          <div id="metric-correctness" class="text-2xl font-extrabold text-white">--</div>
+          <span class="text-[10px] text-slate-400">Overall test case accuracy</span>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80">
+          <div class="flex items-center justify-between text-slate-400 text-xs mb-1">
+            <span>Retrieval Precision</span>
+            <i class="fa-solid fa-bullseye text-indigo-400"></i>
+          </div>
+          <div id="metric-precision" class="text-2xl font-extrabold text-white">--</div>
+          <span class="text-[10px] text-slate-400">Relevance of top-k passages</span>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80">
+          <div class="flex items-center justify-between text-slate-400 text-xs mb-1">
+            <span>Hallucination Guard</span>
+            <i class="fa-solid fa-shield-virus text-emerald-400"></i>
+          </div>
+          <div id="metric-hallucination" class="text-2xl font-extrabold text-emerald-400">--</div>
+          <span class="text-[10px] text-slate-400">Unanswerable rejection rate</span>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80">
+          <div class="flex items-center justify-between text-slate-400 text-xs mb-1">
+            <span>Avg Response Latency</span>
+            <i class="fa-solid fa-bolt text-amber-400"></i>
+          </div>
+          <div id="metric-latency" class="text-2xl font-extrabold text-white">--</div>
+          <span class="text-[10px] text-slate-400">Vector search + synthesis</span>
+        </div>
+      </div>
+
+      <!-- Test Cases Breakdown Table -->
+      <div class="bg-slate-800/60 rounded-2xl border border-slate-700/80 overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-700/80 flex items-center justify-between">
+          <h3 class="text-xs font-bold text-white uppercase tracking-wider">Test Suite Case Results</h3>
+          <span id="benchmark-timestamp" class="text-[11px] text-slate-400">Run benchmark to see detailed logs</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-800/90 text-slate-400 uppercase text-[10px] border-b border-slate-700">
+              <tr>
+                <th class="py-2.5 px-4">Test Case</th>
+                <th class="py-2.5 px-4">Category</th>
+                <th class="py-2.5 px-4">Expected Action</th>
+                <th class="py-2.5 px-4">Status</th>
+                <th class="py-2.5 px-4">Result</th>
+                <th class="py-2.5 px-4">Latency</th>
+              </tr>
+            </thead>
+            <tbody id="eval-table-body" class="divide-y divide-slate-700/60 text-slate-300">
+              <tr>
+                <td colspan="6" class="py-6 text-center text-slate-500">Click "Run Evaluation Benchmark" above to execute tests.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Feedback Modal -->
+  <div id="feedback-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white">Provide Answer Feedback</h3>
+        <button onclick="closeFeedbackModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <input type="hidden" id="modal-query-id">
+      <input type="hidden" id="modal-rating">
+      <p id="modal-feedback-type" class="text-xs text-slate-300"></p>
+      <div>
+        <label class="block text-xs font-medium text-slate-400 mb-1">Optional Comments</label>
+        <textarea id="modal-comment" rows="3" placeholder="Share why this answer was helpful or if anything was inaccurate..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"></textarea>
+      </div>
+      <div class="flex justify-end space-x-2">
+        <button onclick="closeFeedbackModal()" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white">Cancel</button>
+        <button onclick="submitFeedbackModal()" class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white">Submit Feedback</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
